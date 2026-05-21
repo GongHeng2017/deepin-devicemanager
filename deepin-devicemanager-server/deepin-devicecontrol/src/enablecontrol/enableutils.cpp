@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2019 ~ 2023 UnionTech Software Technology Co., Ltd.
+// SPDX-FileCopyrightText: 2019 - 2026 UnionTech Software Technology Co., Ltd.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -12,6 +12,7 @@
 #include <QCryptographicHash>
 #include <QRegularExpression>
 #include <QDebug>
+#include <QFileInfo>
 
 #include <net/if.h>
 #include <sys/ioctl.h>
@@ -140,7 +141,7 @@ void EnableUtils::disableInDevice()
 
 bool EnableUtils::ioctlOperateNetworkLogicalName(const QString &logicalName, bool enable)
 {
-    if (logicalName.startsWith("wlan") || logicalName.startsWith("wlp")) {  // Wireless LAN
+    if (isWireless(logicalName)) {  // Wireless LAN
         // 第一步：获取 wiphy 编号
         QProcess iwProcess;
         iwProcess.start("iw", QStringList() << "dev" << logicalName << "info");
@@ -251,4 +252,14 @@ bool EnableUtils::getMapInfo(const QString &item, QMap<QString, QString> &mapInf
     }
 
     return true;
+}
+
+bool EnableUtils::isWireless(const QString &logicalName)
+{
+    QFileInfo wirelessInfo(QString("/sys/class/net/%1/wireless").arg(logicalName));
+    QFileInfo phyInfo(QString("/sys/class/net/%1/phy80211").arg(logicalName));
+    if (wirelessInfo.exists() || phyInfo.exists())
+        return true;
+    else
+        return false;
 }
