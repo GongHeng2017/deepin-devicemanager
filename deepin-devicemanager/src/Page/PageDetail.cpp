@@ -360,8 +360,9 @@ void PageDetail::clearWidget()
 
     QList<DetailButton *> listDetailButton = m_ListDetailButton;
     m_ListDetailButton.clear();
-    // 清空DetailButton
+    // 清空DetailButton，先断开信号连接，防止延迟删除期间旧按钮触发回调
     foreach (auto widget, listDetailButton) {
+        disconnect(widget, &DetailButton::clicked, this, &PageDetail::slotBtnClicked);
         widget->deleteLater();
         widget = nullptr;
     }
@@ -401,6 +402,9 @@ void PageDetail::slotBtnClicked()
             break;
         index++;
     }
+
+    if (index >= m_ListTextBrowser.size())
+        return;
 
     // 改变按钮的状态，展开和收起的切换
     if (button)

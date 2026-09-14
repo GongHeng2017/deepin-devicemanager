@@ -131,6 +131,10 @@ MainWindow::MainWindow(QWidget *parent)
 void MainWindow::refreshDataBaseLater()
 {
     DBusInterface::getInstance()->refreshInfo();
+    // 禁用用户交互，防止 2 秒延迟窗口内用户操作触发竞态
+    m_refreshing = true;
+    mp_ButtonBox->setEnabled(false);
+    mp_DeviceWidget->setEnabled(false);
     QTimer::singleShot(2000, this, [ = ]() {  //test the x86 the fast desktop PC need 2s
         // 加载设备信息
         refreshDataBase();
@@ -526,6 +530,7 @@ void MainWindow::slotLoadingFinish(const QString &message)
         if (!startScanningFlag) {
             mp_ButtonBox->setEnabled(true);
         }
+        mp_DeviceWidget->setEnabled(true);
         // 刷新结束
         m_refreshing = false;
 
