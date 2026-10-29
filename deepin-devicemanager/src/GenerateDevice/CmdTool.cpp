@@ -14,6 +14,8 @@
 #include<QDateTime>
 #include<QMutex>
 #include <QCryptographicHash>
+#include <QRegularExpression>
+#include <QRegularExpressionMatch>
 
 // 其它头文件
 #include "../commondefine.h"
@@ -143,6 +145,8 @@ void CmdTool::loadCmdInfo(const QString &key, const QString &debugFile)
         loadCatConfigInfo(key, debugFile);
     else if ("nvidia" == key)
         loadNvidiaSettingInfo(key, debugFile);
+    else if ("glxinfo" == key)
+        loadGlxInfoForVideoMemory(key, debugFile);
     else
         loadCatInfo(key, debugFile);
 }
@@ -1017,6 +1021,58 @@ void CmdTool::loadNvidiaSettingInfo(const QString &key, const QString &debugfile
         }
     }
 
+}
+
+void CmdTool::loadGlxInfoForVideoMemory(const QString &key, const QString &debugfile)
+{
+    Q_UNUSED(debugfile)
+
+    // S02: glxinfo 依赖 X Server (DISPLAY)，无头/纯 Wayland 环境跳以避免 3s 超时
+    if (qEnvironmentVariableIsEmpty("DISPLAY")) {
+        qWarning() << "DISPLAY not set, skip glxinfo for VRAM fallback";
+        return;
+    }
+
+    QProcess process;
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    process.setProcessEnvironment(env);
+    // S01: 使用不带路径的 glxinfo 让 PATH 解析，避免硬编码 /usr/bin/glxinfo
+    process.start("glxinfo", QStringList() << "-B");
+    if (!process.waitForFinished(3000)) {
+        qCritical() << "Error executing glxinfo:" << process.errorString();
+        return;
+    }
+
+    QString output = QString::fromLocal8Bit(process.readAllStandardOutput());
+    QStringList lines = output.split('\n');
+    QRegularExpression regex("^([^:]+):\\s*(.+)$");
+
+    QMap<QString, QString> mapInfo;
+    bool hasMemory = false;
+    bool hasRenderer = false;
+
+    for (const QString &line : lines) {
+        QRegularExpressionMatch match = regex.match(line);
+        if (!match.hasMatch())
+            continue;
+
+        QString frontValue = match.captured(1).trimmed();
+        QString behindValue = match.captured(2).trimmed();
+
+        if (frontValue == "Video memory") {
+            mapInfo.insert(kGraphicsMemory, behindValue);
+            hasMemory = true;
+        } else if (frontValue == "OpenGL renderer string") {
+            mapInfo.insert(kRenderer, behindValue);
+            hasRenderer = true;
+        }
+
+        if (hasMemory && hasRenderer)
+            break;
+    }
+
+    if (hasMemory)
+        addMapInfo(key, mapInfo);
 }
 
 void CmdTool::getMapInfoFromCmd(const QString &info, QMap<QString, QString> &mapInfo, const QString &ch)

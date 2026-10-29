@@ -1,10 +1,11 @@
-// SPDX-FileCopyrightText: 2022 UnionTech Software Technology Co., Ltd.
+// SPDX-FileCopyrightText: 2022 - 2026 UnionTech Software Technology Co., Ltd.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // 项目自身文件
 #include "DeviceGpu.h"
 #include "commonfunction.h"
+#include "commondefine.h"
 
 // Qt库文件
 #include<QLoggingCategory>
@@ -267,6 +268,50 @@ void DeviceGpu::setDmesgInfo(const QMap<QString, QString> &mapInfo)
         QString size = mapInfo["Size"];
         m_GraphicsMemory = size.replace(m_HwinfoToLshw + "=", "");
     }
+}
+
+void DeviceGpu::setGlxInfo(const QMap<QString, QString> &mapInfo)
+{
+    if (!mapInfo.contains(kGraphicsMemory))
+        return;
+
+    // glxinfo -B 仅反映当前 GL 渲染 GPU 的显存，且无 BusID 可用于匹配设备，
+    // 故仅在尚未获取到显存值时作为兜底，避免覆盖其他来源(如 sysfs gpu-info)已得到的正确值
+    if (!m_GraphicsMemory.isEmpty())
+        return;
+
+    // M01: glxinfo 仅反映当前活跃 GL 渲染 GPU 的显存。
+    // 提取 OpenGL renderer string 与 GPU 名称/型号做匹配，仅匹配的 GPU 才填入显存值，
+    // 避免多显卡场景下将活跃 GPU 的显存错误填入非活跃 GPU。
+    if (mapInfo.contains(kRenderer)) {
+        QString renderer = mapInfo[kRenderer].trimmed();
+        if (!renderer.isEmpty()) {
+            QString nameLower = m_Name.toLower();
+            QString modelLower = m_Model.toLower();
+            QString rendererLower = renderer.toLower();
+            if (!nameLower.contains(rendererLower) && !rendererLower.contains(nameLower) &&
+                !modelLower.contains(rendererLower) && !rendererLower.contains(modelLower)) {
+                qWarning() << "glxinfo renderer [" << renderer
+                           << "] does not match GPU name [" << m_Name
+                           << "] or model [" << m_Model
+                           << "], skip filling VRAM from glxinfo";
+                return;
+            }
+        }
+    }
+
+    QString memory = mapInfo[kGraphicsMemory].trimmed();
+    // 将 MB 转换为 GB
+    if (memory.endsWith("MB", Qt::CaseInsensitive)) {
+        QString numStr = memory.left(memory.length() - 2).trimmed();
+        bool ok = false;
+        double value = numStr.toInt(&ok);
+        if (ok && value >= 1024) {
+            m_GraphicsMemory = QString("%1GB").arg(value / 1024);
+            return;
+        }
+    }
+    m_GraphicsMemory = memory;
 }
 
 void DeviceGpu::setGpuInfo(const QMap<QString, QString> &mapInfo)
